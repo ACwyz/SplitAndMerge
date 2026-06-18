@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频播放 & 文件下载器</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+            max-width: 1000px;
+            margin: 30px auto;
+            padding: 0 20px;
+            background: #f0f2f5;
+            color: #1e293b;
+        }
+        h1 { display: flex; align-items: center; gap: 12px; font-weight: 500; }
+        .badge { background: #2563eb; color: #fff; font-size: 14px; padding: 2px 12px; border-radius: 20px; }
+        .card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            padding: 20px 24px;
+            margin-bottom: 20px;
+        }
+        .controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .btn {
+            background: #2563eb; color: white; border: none; padding: 10px 22px;
+            border-radius: 8px; font-size: 16px; font-weight: 500; cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .btn:hover { background: #1d4ed8; }
+        .btn:active { transform: scale(0.97); }
+        .btn:disabled { background: #94a3b8; cursor: not-allowed; pointer-events: none; }
+        .btn-play { background: #16a34a; }
+        .btn-play:hover { background: #15803d; }
+        .btn-download { background: #eab308; color: #1e293b; }
+        .btn-download:hover { background: #ca8a04; }
+        .status { font-size: 15px; color: #475569; margin-left: 4px; }
+        .file-list { margin-top: 8px; }
+        .file-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 18px; border-bottom: 1px solid #e9edf2;
+            border-radius: 8px;
+        }
+        .file-item:hover { background: #f8fafc; }
+        .file-item:last-child { border-bottom: none; }
+        .file-name {
+            display: flex; align-items: center; gap: 12px; font-weight: 500;
+            flex: 1;
+        }
+        .file-name .icon { font-size: 20px; }
+        .file-name .type-tag {
+            font-size: 12px;
+            background: #e2e8f0;
+            padding: 2px 10px;
+            border-radius: 12px;
+            color: #475569;
+            font-weight: 400;
+        }
+        .file-name .type-tag.video { background: #dbeafe; color: #1d4ed8; }
+        .file-name .type-tag.file { background: #fef9c3; color: #854d0e; }
+        .file-actions { display: flex; gap: 8px; }
+        .progress-wrap {
+            margin: 12px 0 4px 0; height: 6px; background: #e2e8f0;
+            border-radius: 4px; overflow: hidden; display: none;
+        }
+        .progress-wrap.active { display: block; }
+        .progress-fill {
+            height: 100%; background: #2563eb; width: 0%;
+            transition: width 0.25s ease; border-radius: 4px;
+        }
+        .progress-info {
+            font-size: 14px; color: #475569; margin-top: 6px; display: none;
+        }
+        .progress-info.active { display: block; }
+        .empty-msg { padding: 36px 20px; text-align: center; color: #94a3b8; font-size: 16px; }
+        .error-msg {
+            background: #fee2e2; color: #b91c1c; padding: 12px 18px;
+            border-radius: 8px; margin: 8px 0; font-size: 14px;
+        }
+        .player-container {
+            margin-top: 16px;
+            background: #0f172a;
+            border-radius: 12px;
+            overflow: hidden;
+            display: none;
+        }
+        .player-container.active { display: block; }
+        .player-container video {
+            width: 100%;
+            display: block;
+            max-height: 500px;
+            background: #000;
+        }
+        .player-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            background: #1e293b;
+            color: #e2e8f0;
+        }
+        .player-controls .close-btn {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        .player-controls .close-btn:hover { color: #f1f5f9; }
+        .footer {
+            margin-top: 30px; font-size: 13px; color: #94a3b8;
+            text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px;
+        }
+        .highlight { background: #dbeafe; padding: 2px 6px; border-radius: 4px; }
+        .warning { background: #fef9c3; padding: 2px 8px; border-radius: 4px; color: #854d0e; }
+    </style>
+</head>
+<body>
+    <h1>
+        <span>🎬 视频播放 & 文件下载器</span>
+        <span class="badge">智能识别</span>
+    </h1>
+
+    <div class="card">
+        <div class="controls">
+            <button class="btn" id="selectDirBtn">📂 选择根目录</button>
+            <span class="status" id="statusText">请选择包含 _vsplit 或 _fsplit 文件夹的目录</span>
+        </div>
+        <div id="errorArea"></div>
+    </div>
+
+    <div class="card">
+        <div class="file-list" id="fileList">
+            <div class="empty-msg">尚未选择目录</div>
+        </div>
+        <div class="progress-wrap" id="progressWrap">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-info" id="progressInfo">⏳ 0.0 MB / 0.0 MB (0%)</div>
+    </div>
+
+    <!-- 视频播放器容器 -->
+    <div class="player-container" id="playerContainer">
+        <video id="videoPlayer" controls></video>
+        <div class="player-controls">
+            <span id="playerStatus">正在播放...</span>
+            <button class="close-btn" id="closePlayerBtn">✕</button>
+        </div>
+    </div>
+
+    <div class="footer">
+        使用 <span class="highlight">File System Access API</span> 和 <span class="highlight">hls.js</span>。<br>
+        <span class="warning">⚠️ 播放需要 .m3u8 和 .ts 文件位于同一目录，且服务器支持 CORS。</span>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script>
+        (function() {
+            "use strict";
+
+            // DOM 引用
+            const selectBtn = document.getElementById('selectDirBtn');
+            const statusText = document.getElementById('statusText');
+            const fileListEl = document.getElementById('fileList');
+            const errorArea = document.getElementById('errorArea');
+            const progressWrap = document.getElementById('progressWrap');
+            const progressFill = document.getElementById('progressFill');
+            const progressInfo = document.getElementById('progressInfo');
+            const playerContainer = document.getElementById('playerContainer');
+            const videoPlayer = document.getElementById('videoPlayer');
+            const playerStatus = document.getElementById('playerStatus');
+            const closePlayerBtn = document.getElementById('closePlayerBtn');
+
+            let dirMap = []; // 每个元素: { baseName, handle, type: 'video' | 'file' }
+            let currentHls = null;
+
+            // ----- 辅助函数 -----
+            function clearError() { errorArea.innerHTML = ''; }
+            function showError(msg) {
+                errorArea.innerHTML = `<div class="error-msg">⚠️ ${msg}</div>`;
+            }
+
+            // 关闭播放器
+            function closePlayer() {
+                if (currentHls) {
+                    currentHls.destroy();
+                    currentHls = null;
+                }
+                videoPlayer.pause();
+                videoPlayer.removeAttribute('src');
+                videoPlayer.load();
+                playerContainer.classList.remove('active');
+                playerStatus.textContent = '';
+            }
+
+            // 播放视频（HLS）
+            function playVideo(m3u8FileHandle, baseName) {
+                closePlayer();
+                m3u8FileHandle.getFile().then(file => {
+                    const url = URL.createObjectURL(file);
+                    if (Hls.isSupported()) {
+                        const hls = new Hls({
+                            enableWorker: true,
+                            lowLatencyMode: true,
+                        });
+                        currentHls = hls;
+                        hls.loadSource(url);
+                        hls.attachMedia(videoPlayer);
+                        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                            videoPlayer.play().catch(() => {});
+                        });
+                        hls.on(Hls.Events.ERROR, (event, data) => {
+                            if (data.fatal) {
+                                showError(`播放错误: ${data.type}`);
+                                closePlayer();
+                            }
+                        });
+                    } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                        videoPlayer.src = url;
+                        videoPlayer.play().catch(() => {});
+                    } else {
+                        showError('您的浏览器不支持 HLS 播放');
+                        return;
+                    }
+                    playerContainer.classList.add('active');
+                    playerStatus.textContent = `正在播放: ${baseName}`;
+                }).catch(err => {
+                    showError('无法读取 .m3u8 文件: ' + err.message);
+                });
+            }
+
+            // 检测文件夹内是否有 .m3u8
+            async function hasM3U8(folderHandle) {
+                try {
+                    await folderHandle.getFileHandle('playlist.m3u8');
+                    return 'playlist.m3u8';
+                } catch {}
+                try {
+                    for await (const [name] of folderHandle.entries()) {
+                        if (name.endsWith('.m3u8')) {
+                            return name;
+                        }
+                    }
+                } catch {}
+                return null;
+            }
+
+            // 渲染列表
+            function renderList() {
+                if (dirMap.length === 0) {
+                    fileListEl.innerHTML = `<div class="empty-msg">📭 没有找到以 <strong>_vsplit</strong> 或 <strong>_fsplit</strong> 结尾的文件夹</div>`;
+                    return;
+                }
+                let html = '';
+                dirMap.forEach((item, index) => {
+                    const isVideo = item.type === 'video';
+                    const typeTag = isVideo ? '视频' : '文件';
+                    const tagClass = isVideo ? 'video' : 'file';
+                    const actionBtn = isVideo
+                        ? `<button class="btn btn-play play-btn" data-index="${index}">▶ 播放</button>`
+                        : `<button class="btn btn-download download-btn" data-index="${index}">⬇ 下载</button>`;
+                    html += `
+                        <div class="file-item" data-index="${index}">
+                            <span class="file-name">
+                                <span class="icon">📁</span>
+                                ${item.baseName}
+                                <span class="type-tag ${tagClass}">${typeTag}</span>
+                            </span>
+                            <div class="file-actions">
+                                ${actionBtn}
+                            </div>
+                        </div>
+                    `;
+                });
+                fileListEl.innerHTML = html;
+
+                // 绑定播放按钮（仅视频）
+                fileListEl.querySelectorAll('.play-btn').forEach(btn => {
+                    btn.addEventListener('click', async function(e) {
+                        e.stopPropagation();
+                        const idx = parseInt(this.dataset.index, 10);
+                        if (isNaN(idx) || idx >= dirMap.length) return;
+                        const item = dirMap[idx];
+                        if (item.type !== 'video') return;
+                        const m3u8Name = await hasM3U8(item.handle);
+                        if (!m3u8Name) {
+                            showError('该文件夹中没有找到 .m3u8 索引文件，无法播放');
+                            return;
+                        }
+                        try {
+                            const m3u8FileHandle = await item.handle.getFileHandle(m3u8Name);
+                            playVideo(m3u8FileHandle, item.baseName);
+                        } catch (err) {
+                            showError('无法获取 .m3u8 文件: ' + err.message);
+                        }
+                    });
+                });
+
+                // 绑定下载按钮（仅文件）
+                fileListEl.querySelectorAll('.download-btn').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const idx = parseInt(this.dataset.index, 10);
+                        if (isNaN(idx) || idx >= dirMap.length) return;
+                        const item = dirMap[idx];
+                        if (item.type !== 'file') return;
+                        startDownload(item);
+                    });
+                });
+            }
+
+            // ----- 扫描目录 -----
+            async function scanDirectory(rootHandle) {
+                clearError();
+                statusText.textContent = '⏳ 正在扫描...';
+                selectBtn.disabled = true;
+                const found = [];
+                try {
+                    for await (const [name, handle] of rootHandle.entries()) {
+                        if (handle.kind === 'directory') {
+                            let type = null;
+                            let baseName = null;
+                            if (name.endsWith('_vsplit')) {
+                                type = 'video';
+                                baseName = name.slice(0, -7);
+                            } else if (name.endsWith('_fsplit')) {
+                                type = 'file';
+                                baseName = name.slice(0, -7);
+                            }
+                            if (type && baseName) {
+                                found.push({ baseName, handle, type });
+                            }
+                        }
+                    }
+                } catch (err) {
+                    showError('扫描失败: ' + err.message);
+                    selectBtn.disabled = false;
+                    return;
+                }
+                dirMap = found;
+                renderList();
+                statusText.textContent = `✅ 找到 ${found.length} 个文件夹（视频: ${found.filter(f=>f.type==='video').length}, 文件: ${found.filter(f=>f.type==='file').length}）`;
+                selectBtn.disabled = false;
+            }
+
+            // ----- 下载（合并）核心（串行）-----
+            async function readManifestOrThrow(folderHandle) {
+                try {
+                    const fileHandle = await folderHandle.getFileHandle('manifest.json');
+                    const file = await fileHandle.getFile();
+                    return JSON.parse(await file.text());
+                } catch {
+                    throw new Error('缺少 manifest.json 索引文件');
+                }
+            }
+
+            async function downloadFile(baseName, folderHandle) {
+                const manifest = await readManifestOrThrow(folderHandle);
+                const partEntries = [];
+                let totalSize = 0;
+
+                for (const partInfo of manifest.parts) {
+                    try {
+                        const fileHandle = await folderHandle.getFileHandle(partInfo.name);
+                        const file = await fileHandle.getFile();
+                        if (file.size !== partInfo.size) {
+                            throw new Error(`分片 "${partInfo.name}" 大小不匹配`);
+                        }
+                        partEntries.push({ handle: fileHandle, size: partInfo.size });
+                    } catch (err) {
+                        if (err.name === 'NotFoundError' || err.code === 'NotFoundError') {
+                            throw new Error(`分片 "${partInfo.name}" 不存在`);
+                        }
+                        throw err;
+                    }
+                }
+                totalSize = manifest.total_size || partEntries.reduce((s, p) => s + p.size, 0);
+
+                if (!window.showSaveFilePicker) throw new Error('浏览器不支持 showSaveFilePicker');
+                const fileHandle = await window.showSaveFilePicker({ suggestedName: baseName });
+                const writable = await fileHandle.createWritable();
+
+                let writtenBytes = 0;
+
+                const stream = new ReadableStream({
+                    async start(controller) {
+                        try {
+                            for (const entry of partEntries) {
+                                const file = await entry.handle.getFile();
+                                const reader = file.stream().getReader();
+                                while (true) {
+                                    const { done, value } = await reader.read();
+                                    if (done) break;
+                                    controller.enqueue(value);
+                                    writtenBytes += value.byteLength;
+                                    const progress = (writtenBytes / totalSize) * 100;
+                                    progressFill.style.width = Math.min(progress, 100) + '%';
+                                    const writtenMB = (writtenBytes / 1024 / 1024).toFixed(1);
+                                    const totalMB = (totalSize / 1024 / 1024).toFixed(1);
+                                    if (writtenBytes >= totalSize) {
+                                        progressInfo.textContent = '⏳ 正在完成写入... (100%)';
+                                    } else {
+                                        progressInfo.textContent = `⏳ 已下载 ${writtenMB} MB / ${totalMB} MB (${Math.round(progress)}%)`;
+                                    }
+                                }
+                            }
+                            controller.close();
+                        } catch (err) {
+                            controller.error(err);
+                        }
+                    }
+                });
+
+                await stream.pipeTo(writable);
+                progressFill.style.width = '100%';
+                progressInfo.textContent = '✅ 下载完成！文件已保存';
+                return totalSize;
+            }
+
+            async function startDownload({ baseName, handle }) {
+                clearError();
+                document.querySelectorAll('.download-btn').forEach(b => b.disabled = true);
+                closePlayer();
+
+                statusText.textContent = `⏳ 正在打开保存对话框...`;
+                progressWrap.classList.add('active');
+                progressInfo.classList.add('active');
+                progressFill.style.width = '0%';
+                progressInfo.textContent = '⏳ 等待选择保存位置...';
+
+                try {
+                    const totalBytes = await downloadFile(baseName, handle);
+                    const sizeMB = (totalBytes / 1024 / 1024).toFixed(2);
+                    statusText.textContent = `✅ ${baseName} 下载完成！ (${sizeMB} MB)`;
+                } catch (err) {
+                    if (err.name === 'AbortError' || err.message.includes('abort')) {
+                        statusText.textContent = '⏹ 用户取消保存';
+                        progressInfo.textContent = '⏹ 已取消';
+                    } else {
+                        showError('下载失败: ' + err.message);
+                        statusText.textContent = '❌ 下载出错';
+                        progressInfo.textContent = '❌ 下载失败';
+                    }
+                } finally {
+                    progressWrap.classList.remove('active');
+                    document.querySelectorAll('.download-btn').forEach(b => b.disabled = false);
+                }
+            }
+
+            // ----- 选择目录 -----
+            async function selectDirectory() {
+                if (!window.showDirectoryPicker) {
+                    showError('浏览器不支持 File System Access API，请使用 Chrome 86+');
+                    return;
+                }
+                try {
+                    const root = await window.showDirectoryPicker();
+                    await scanDirectory(root);
+                } catch (err) {
+                    if (err.name !== 'AbortError' && err.name !== 'SecurityError') {
+                        showError('选择目录失败: ' + err.message);
+                    } else {
+                        statusText.textContent = '已取消选择';
+                    }
+                }
+            }
+
+            // 事件绑定
+            selectBtn.addEventListener('click', selectDirectory);
+            closePlayerBtn.addEventListener('click', closePlayer);
+
+            statusText.textContent = '请选择一个根目录';
+        })();
+    </script>
+</body>
+</html>
